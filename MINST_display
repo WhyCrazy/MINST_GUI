@@ -1,0 +1,93 @@
+#!/usr/bin/python3
+
+from tkinter import *
+from sys import *
+import tensorflow as tf
+import numpy as np
+
+def draw(event):
+    x, y = event.x, event.y
+    if x > 560 or y < 40:
+        return
+    global drawing
+    drawing[int(x / 20) + 28 * int((y - 40) / 20)] = 1
+    if canvas.old_coords:
+        x1, y1 = canvas.old_coords
+        canvas.create_line(x, y, x1, y1, fill="#fff", width=20)
+    canvas.old_coords = x, y
+
+def change_state(event):
+    canvas.old_coords=None
+    global drawing
+    for i in range(784):
+        if drawing[i] != 0 :
+                canvas.create_rectangle((i%28)*20+560, int(i/28)*20+40, (i%28)*20+580, int(i/28)*20+60, fill = "#fff")
+    canvas.create_rectangle(1182, 42, 1680, 600, fill="#000")
+    canvas.create_rectangle(1182, 0, 1680, 38, fill="#000")
+    canvas.create_text(1300, 300, anchor="w", font=("Arial", 200), text=str(test([drawing]))[1], fill="#fff")
+
+def set_drawing():
+    drawing= [0 for i in range(784)]
+    return drawing
+
+def test(drawing):
+    result = session.run(out_with_activation, feed_dict={x:drawing})
+    canvas.create_text(1300, 20, anchor="w", font=("Arial", 15), text="Chance: "+ str(max(result[0])), fill="#fff")
+    print(result)
+    return session.run(out_argmax, feed_dict={x:drawing})
+
+def reset(event):
+    global drawing
+    drawing = set_drawing()
+    canvas.create_rectangle(0, 40, 1680, 600, fill="#000")
+    canvas.create_rectangle(560, 40, 560, 600, outline="#fff", fill="#fff")
+    canvas.create_rectangle(1120, 40, 1120, 600, outline="#fff", fill="#fff")
+    canvas.create_rectangle(0, 40, 1680, 40, outline="#fff", fill="#fff")
+    canvas.create_text(1300, 300, anchor="w", font=("Arial", 200), text="?", fill="#fff")
+    i = 580
+    while i < 1120:
+        canvas.create_rectangle(i, 42, i, 598, outline="#555", fill="#555")
+        i = i + 20
+    i=60
+    while i < 600:
+        canvas.create_rectangle(562, i, 1118, i, outline="#555", fill="#555")
+        i = i + 20
+
+
+mnist = tf.keras.datasets.mnist
+(x_train, y_train), (x_test, y_test) = mnist.load_data()
+x_train=x_train.astype(np.float16).reshape(-1, 28 * 28) / 255
+LEARNING_RATE = 0.03
+BATCH_SIZE = 32
+x = tf.placeholder(tf.float32, [None, 784])
+hidden_layer=tf.layers.dense(x, 784, activation=tf.nn.sigmoid)
+out = tf.layers.dense(hidden_layer, 10, activation=None)
+out_with_activation = tf.nn.sigmoid(out)
+out_argmax = tf.argmax(out_with_activation, axis=1)
+y = tf.placeholder(tf.int32, [None])
+loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=out)
+optimizer = tf.train.GradientDescentOptimizer(LEARNING_RATE)
+training_op = optimizer.minimize(loss)
+init = tf.global_variables_initializer()
+session = tf.Session()
+session.run(init)
+print("Starting Training")
+for i in range(1000):
+    batch_idx = np.random.choice(len(x_train), BATCH_SIZE)
+    batch_x = x_train[batch_idx]
+    batch_y = y_train[batch_idx]
+    loss_value, _ = session.run([loss, training_op], feed_dict={x:x_train[batch_idx], y:y_train[batch_idx]})
+print("Training Done")
+
+win = Tk()
+win.minsize(1680, 600)
+win.maxsize(1680, 600)
+top = Frame(width=1680, bg="black")
+canvas = Canvas(win, width=1680, height=600, bg="black")
+canvas.old_coords=None
+reset(None)
+canvas.pack()
+win.bind('<B1-Motion>', draw)
+win.bind('<ButtonRelease-1>', change_state)
+win.bind('<space>', reset)
+win.mainloop()
